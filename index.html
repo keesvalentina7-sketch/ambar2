@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portal de Ofertas Comerciales</title>
+  <!-- Bootstrap 5 CDN -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .card-img-top {
+      height: 220px;
+      object-fit: cover;
+    }
+  </style>
+</head>
+<body class="bg-light">
+
+  <!-- Barra de navegación -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container">
+      <a class="navbar-brand fw-bold" href="#">Marketing Digital</a>
+      <div class="d-flex align-items-center">
+        <!-- Contenedor dinámico de sesión -->
+        <div id="authContainer" class="d-flex align-items-center gap-3">
+          <span id="userName" class="text-white d-none"></span>
+          <button id="btnLogin" class="btn btn-outline-light btn-sm">Iniciar sesión con Google</button>
+          <button id="btnLogout" class="btn btn-danger btn-sm d-none">Cerrar sesión</button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Encabezado / Hero -->
+  <header class="py-5 text-center container">
+    <div class="row py-lg-4">
+      <div class="col-lg-6 col-md-8 mx-auto">
+        <h1 class="fw-bold">Nuestras Ofertas Exclusivas</h1>
+        <p class="lead text-muted">
+          Accede a promociones especiales en nuestros servicios digitales iniciando sesión con tu cuenta de Google.
+        </p>
+      </div>
+    </div>
+  </header>
+
+  <!-- Sección de Ofertas (Siempre visible) -->
+  <main class="container pb-5">
+    <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-4">
+      <h2 class="h4 mb-0 text-secondary">Catálogo de Promociones</h2>
+    </div>
+
+    <!-- Mensaje cuando no está autenticado -->
+    <div id="msgNoAuth" class="alert alert-info text-center py-4 shadow-sm" role="alert">
+      <h5 class="alert-heading mb-2">Contenido exclusivo para usuarios registrados</h5>
+      <p class="mb-0">Por favor, inicia sesión con Google en la esquina superior para desbloquear las ofertas habilitadas.</p>
+    </div>
+
+    <!-- Mensaje de Carga (Spinner) -->
+    <div id="loadingSpinner" class="text-center py-5 d-none">
+      <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Cargando...</span>
+      </div>
+      <p class="mt-2 text-muted">Consultando ofertas disponibles...</p>
+    </div>
+
+    <!-- Mensaje de Error -->
+    <div id="msgError" class="alert alert-danger d-none shadow-sm" role="alert">
+      <strong>Error:</strong> <span id="errorText"></span>
+    </div>
+
+    <!-- Mensaje de Sin Ofertas -->
+    <div id="msgEmpty" class="alert alert-warning text-center d-none shadow-sm" role="alert">
+      No hay ofertas disponibles activas en este momento.
+    </div>
+
+    <!-- Grilla de Tarjetas de Ofertas -->
+    <div id="offersGrid" class="row row-cols-1 row-cols-md-2 row-cols-lg-4 g-4">
+      <!-- Se inyectan dinámicamente con JS -->
+    </div>
+  </main>
+
+  <!-- Firebase SDK Modular -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { 
+      getAuth, 
+      signInWithPopup, 
+      GoogleAuthProvider, 
+      signOut, 
+      onAuthStateChanged 
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+    // 1. Configuración de Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyCnOsU236UpYmyP5GTA0kFyDDd2laJnGps",
+      authDomain: "ambar2-75b4f.firebaseapp.com",
+      projectId: "ambar2-75b4f",
+      storageBucket: "ambar2-75b4f.firebasestorage.app",
+      messagingSenderId: "684157312695",
+      appId: "1:684157312695:web:2652916d77a14e0caff732"
+    };
+
+    // 2. URL de Google Apps Script
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxZS8svjFJzpmey4OyPeZ8K7LrcjsnA68r3VU00JsVSyLHjw9Ar_pEyeJUoNxVO582XcA/exec";
+
+    // Inicializar Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    // Proveedor Google con selector explícito de cuenta
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+
+    // Referencias a elementos del DOM
+    const btnLogin = document.getElementById("btnLogin");
+    const btnLogout = document.getElementById("btnLogout");
+    const userName = document.getElementById("userName");
+    const msgNoAuth = document.getElementById("msgNoAuth");
+    const loadingSpinner = document.getElementById("loadingSpinner");
+    const msgError = document.getElementById("msgError");
+    const errorText = document.getElementById("errorText");
+    const msgEmpty = document.getElementById("msgEmpty");
+    const offersGrid = document.getElementById("offersGrid");
+
+    // Eventos de botones
+    btnLogin.addEventListener("click", async () => {
+      try {
+        ocultarErrores();
+        await signInWithPopup(auth, provider);
+      } catch (error) {
+        mostrarError("No se pudo iniciar sesión: " + error.message);
+      }
+    });
+
+    btnLogout.addEventListener("click", async () => {
+      try {
+        await signOut(auth);
+      } catch (error) {
+        mostrarError("No se pudo cerrar sesión: " + error.message);
+      }
+    });
+
+    // Observador de estado de autenticación
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        // Usuario conectado
+        userName.textContent = `Hola, ${user.displayName || user.email}`;
+        userName.classList.remove("d-none");
+        btnLogin.classList.add("d-none");
+        btnLogout.classList.remove("d-none");
+        msgNoAuth.classList.add("d-none");
+
+        // Obtener el ID Token vigente y cargar ofertas
+        try {
+          const idToken = await user.getIdToken();
+          await cargarOfertas(idToken);
+        } catch (error) {
+          mostrarError("Error al obtener la credencial de autenticación.");
+        }
+
+      } else {
+        // Usuario desconectado: limpiar todo
+        userName.textContent = "";
+        userName.classList.add("d-none");
+        btnLogin.classList.remove("d-none");
+        btnLogout.classList.add("d-none");
+        
+        // Limpiar inmediatamente las ofertas del DOM
+        offersGrid.innerHTML = "";
+        msgEmpty.classList.add("d-none");
+        loadingSpinner.classList.add("d-none");
+        ocultarErrores();
+        msgNoAuth.classList.remove("d-none");
+      }
+    });
+
+    // Función para consultar las ofertas a Apps Script
+    async function cargarOfertas(token) {
+      offersGrid.innerHTML = "";
+      ocultarErrores();
+      msgEmpty.classList.add("d-none");
+      loadingSpinner.classList.remove("d-none");
+
+      try {
+        // Enviar el token como parámetro GET
+        const urlPeticion = `${APPS_SCRIPT_URL}?token=${encodeURIComponent(token)}`;
+        const respuesta = await fetch(urlPeticion);
+
+        if (!respuesta.ok) {
+          throw new Error(`Error en el servidor (${respuesta.status})`);
+        }
+
+        const datos = await respuesta.json();
+
+        loadingSpinner.classList.add("d-none");
+
+        // Validar si el backend devolvió un objeto de error
+        if (datos && datos.error) {
+          mostrarError(datos.mensaje || "Acceso no autorizado.");
+          return;
+        }
+
+        // Validar estructura de lista
+        if (!Array.isArray(datos)) {
+          mostrarError("La respuesta recibida no tiene el formato de lista esperado.");
+          return;
+        }
+
+        if (datos.length === 0) {
+          msgEmpty.classList.remove("d-none");
+          return;
+        }
+
+        // Renderizar las tarjetas
+        renderizarTarjetas(datos);
+
+      } catch (err) {
+        loadingSpinner.classList.add("d-none");
+        mostrarError("No se pudieron obtener las ofertas: " + err.message);
+      }
+    }
+
+    // Renderizar tarjetas con las claves exactas: Nombre, Precio, Descripcion, Imagen
+    function renderizarTarjetas(ofertas) {
+      offersGrid.innerHTML = "";
+
+      ofertas.forEach((item) => {
+        const nombre = item.Nombre ?? "Sin nombre";
+        const precio = item.Precio !== undefined ? `$${Number(item.Precio).toLocaleString("es-AR")}` : "$0";
+        const descripcion = item.Descripcion ?? "Sin descripción disponible.";
+        const imagen = item.Imagen || "https://placehold.co/400x300?text=Sin+Imagen";
+
+        const col = document.createElement("div");
+        col.className = "col";
+
+        col.innerHTML = `
+          <div class="card h-100 shadow-sm border-0">
+            <img 
+              src="${imagen}" 
+              class="card-img-top" 
+              alt="${nombre}" 
+              onerror="this.onerror=null; this.src='https://placehold.co/400x300?text=Imagen+No+Encontrada';"
+            >
+            <div class="card-body d-flex flex-column">
+              <h5 class="card-title fw-bold text-dark">${nombre}</h5>
+              <p class="card-text text-muted small flex-grow-1">${descripcion}</p>
+              <div class="mt-3 pt-2 border-top d-flex justify-content-between align-items-center">
+                <span class="badge bg-success fs-6">${precio}</span>
+                <span class="badge bg-danger">OFERTA</span>
+              </div>
+            </div>
+          </div>
+        `;
+        offersGrid.appendChild(col);
+      });
+    }
+
+    function mostrarError(texto) {
+      errorText.textContent = texto;
+      msgError.classList.remove("d-none");
+    }
+
+    function ocultarErrores() {
+      msgError.classList.add("d-none");
+      errorText.textContent = "";
+    }
+  </script>
+</body>
+</html>
